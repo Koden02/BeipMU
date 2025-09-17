@@ -96,6 +96,12 @@ const uint8 TELQUAL_IS        = 0;        /* option is... */
 const uint8 TELQUAL_SEND      = 1;        /* send option */
 const uint8 TELQUAL_INFO      = 2;        /* ENVIRON: informational version of IS */
 
+static constexpr uint32 MTTS_ANSI      = 1;
+static constexpr uint32 MTTS_VT100     = 2;
+static constexpr uint32 MTTS_UTF8      = 4;
+static constexpr uint32 MTTS_256COLORS = 8;
+static constexpr uint32 MTTS_TRUECOLOR = 256;
+
 TelnetParser::TelnetParser(INotify &notify)
 : m_notify(notify)
 {
@@ -105,6 +111,24 @@ void TelnetParser::Reset()
 {
    m_buffer.Empty();
    m_state=State::Normal;
+   m_ttype_phase=TTypePhase::Name;
+   m_mtts_flags=0;
+}
+
+void TelnetParser::SendTTYPE(ConstString type)
+{
+   m_notify.OnTelnet(FixedStringBuilder<256>(MakeString<TELNET_IAC, TELNET_SB, TELOPT_TTYPE, TELQUAL_IS>, type, MakeString<TELNET_IAC, TELNET_SE>));
+}
+
+uint32 TelnetParser::ComputeMTTSFlags() const
+{
+   uint32 flags=0;
+   flags|=MTTS_ANSI;
+   flags|=MTTS_VT100;
+   flags|=MTTS_UTF8;
+   flags|=MTTS_256COLORS;
+   flags|=MTTS_TRUECOLOR;
+   return flags;
 }
 
 void TelnetParser::Parse(Array<const char> buffer)
@@ -334,7 +358,40 @@ void TelnetParser::Parse(Array<const char> buffer)
             case State::SB_TTYPE:
                if(c==TELQUAL_SEND)
                {
-                  m_notify.OnTelnet(FixedStringBuilder<256>(MakeString<TELNET_IAC, TELNET_SB, TELOPT_TTYPE, TELQUAL_IS>, g_ppropGlobal->pclTelnet_TType(), MakeString<TELNET_IAC, TELNET_SE>));
+                  switch(m_ttype_phase)
+                  {
+                     case TTypePhase::Name:
+                        m_mtts_flags=ComputeMTTSFlags();
+                        SendTTYPE("BEIPMU");
+                        m_ttype_phase=TTypePhase::Term;
+                        break;
+
+                     case TTypePhase::Term:
+                     {
+                        auto ttype=g_ppropGlobal->pclTelnet_TType();
+                        if(IEquals(ttype, "Beip"))
+                           SendTTYPE("XTERM-256COLOR");
+                        else
+                           SendTTYPE(ttype);
+                        m_ttype_phase=TTypePhase::MTTS1;
+                        break;
+                     }
+
+                     case TTypePhase::MTTS1:
+                     {
+                        HybridStringBuilder<> string("MTTS ", m_mtts_flags);
+                        SendTTYPE(string);
+                        m_ttype_phase=TTypePhase::MTTS2;
+                        break;
+                     }
+
+                     case TTypePhase::MTTS2:
+                     {
+                        HybridStringBuilder<> string("MTTS ", m_mtts_flags);
+                        SendTTYPE(string);
+                        break;
+                     }
+                  }
                   m_state=State::SB_WaitForIAC; continue;
                }
                break;

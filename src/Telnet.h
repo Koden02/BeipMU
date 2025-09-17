@@ -28,6 +28,16 @@ private:
    INotify &m_notify;
 
    void HandleCharset();
+   void SendTTYPE(ConstString type);
+   uint32 ComputeMTTSFlags() const;
+
+   enum struct TTypePhase
+   {
+      Name,
+      Term,
+      MTTS1,
+      MTTS2,
+   };
 
    enum struct State
    {
@@ -51,6 +61,8 @@ private:
    State m_state{State::Normal};
    Collection<char> m_buffer;
    unsigned m_sb_start; // Index in buffer where subnegotation starts
+   TTypePhase m_ttype_phase{TTypePhase::Name};
+   uint32 m_mtts_flags{};
 };
 
 struct TelnetDebugger
