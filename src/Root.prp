@@ -1029,7 +1029,7 @@ Prop Global
 
    Flag TCP_KeepAlive = true
    Flag TCP_NoDelay = true
-   String Telnet_TType(NoWrite)="Beip"
+   String Telnet_TType(NoWrite)="XTERM-256COLOR"
 
    Flag TaskbarOnTop = false
    Flag TaskbarShowTyped = true
